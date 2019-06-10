@@ -1,121 +1,242 @@
-public class Client implements OpenVPNClientThread.EventReceiver {
-    private OpenVPNClientThread client_thread;
+package com.EECE412A3.Client;
 
-    public static class ConfigError extends Exception {
-	public ConfigError(String msg) { super(msg); }
-    }
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.net.Socket;
+import java.nio.ByteBuffer;
+import java.security.InvalidAlgorithmParameterException;
+import java.security.InvalidKeyException;
+import java.security.KeyPair;
+import java.security.NoSuchAlgorithmException;
+import java.security.PublicKey;
+import java.security.spec.InvalidKeySpecException;
 
-    public static class CredsUnspecifiedError extends Exception {
-	public CredsUnspecifiedError(String msg) { super(msg); }
-    }
+import javax.crypto.BadPaddingException;
+import javax.crypto.Cipher;
+import javax.crypto.IllegalBlockSizeException;
+import javax.crypto.NoSuchPaddingException;
+import javax.crypto.SecretKey;
+import javax.crypto.SecretKeyFactory;
+import javax.crypto.interfaces.DHPublicKey;
+import javax.crypto.spec.DHParameterSpec;
+import javax.crypto.spec.PBEKeySpec;
+import javax.crypto.spec.PBEParameterSpec;
+import javax.xml.bind.DatatypeConverter;
 
-    // Load OpenVPN core (implements ClientAPI_OpenVPNClient) from shared library 
-    static {
-	System.loadLibrary("ovpncli");
-	ClientAPI_OpenVPNClient.init_process();
-	String test = ClientAPI_OpenVPNClient.crypto_self_test();
-	System.out.format("CRYPTO SELF TEST: %s", test);
-    }
+import com.EECE412A3.CryptoInterface;
+import com.EECE412A3.DiffieHellmanHelper;
+import com.EECE412A3.GUIInterface;
+import com.EECE412A3.Helpers;
 
-    public Client(String config_text, String username, String password) throws ConfigError, CredsUnspecifiedError {
-	// init client implementation object
-	client_thread = new OpenVPNClientThread();
 
-	// load/eval config
-	ClientAPI_Config config = new ClientAPI_Config();
-	config.setContent(config_text);
-	config.setCompressionMode("yes");
-	ClientAPI_EvalConfig ec = client_thread.eval_config(config);
-	if (ec.getError())
-	    throw new ConfigError("OpenVPN config file parse error: " + ec.getMessage());
+public class Client implements ClientInterface {
+	
+	//Encryption Constants
+	private static final byte[] SALT = {(byte) 0xa0, (byte) 0x4e, (byte) 0x2b, (byte) 0x92, (byte) 0x4a, (byte) 0xd6, (byte) 0x59, (byte) 0x86};
+	private static final int ITERATION_COUNT = 25;
+	
+	private static PBEParameterSpec pbeParamSpec;
+	
+	private static final String SERVER_IDENTIFICATION = "server";
+	private static final String CLIENT_IDENTIFICATION = "client";
+	
+	private GUIInterface m_gui;
+	
+	//communication streams
+	private OutputStream out;
+	private InputStream in;
+	
+	private String sharedSecret; //shared key
+	private  SecretKey DESK; //session key
+	
+	public Client(GUIInterface gui)
+	{
+		m_gui = gui;
+	}
+	
 
-	// handle creds
-	ClientAPI_ProvideCreds creds = new ClientAPI_ProvideCreds();
-	if (!ec.getAutologin())
-	    {
-		if (username.length() > 0)
-		    {
-			creds.setUsername(username);
-			creds.setPassword(password);
-			creds.setReplacePasswordWithSessionID(true);
-		    }
-		else
-		    throw new CredsUnspecifiedError("OpenVPN config file requires username/password but none provided");
-	    }
-	client_thread.provide_creds(creds);
-    }
+	@Override
+	public void endConnection() 
+	{
+	}
+	
+	@Override
+	public void receiveMessages()
+	{
+		while(true)
+		{
+			try
+			{
+				byte[] input = read(in);
+				m_gui.printf("Receiving encrypted bytes: " + Helpers.ByteToString(input));
+				String modifiedSentence = new String(decryptDES(DESK, input));
+				m_gui.printf(SERVER_IDENTIFICATION + " > " + modifiedSentence);
+				
+			}
+			catch(Exception e)
+			{}
+		}
+	}
 
-    public void connect() {
-	// connect
-	client_thread.connect(this);
+	@Override
+	public boolean sendMessage(String s) 
+	{
+		try
+		{
+			m_gui.printf("Sending message: " + s );
+			byte[] output = s.getBytes();
+			m_gui.printf("Bytes: " + Helpers.ByteToString(output));
+			byte[] encrypted = encryptDES(DESK, output);
+			m_gui.printf("Sending Encrypted bytes: " + Helpers.ByteToString(encrypted));
+			write(out, encrypted);
+			m_gui.printf(CLIENT_IDENTIFICATION + " > " + s);
+		}
+		catch(Exception e )
+		{
+			return false;
+		}
+		return true;
+	}
 
-	// wait for worker thread to exit
-	client_thread.wait_thread_long();
-    }
+	@Override
+	public boolean startClient(String host, int port, String sharedKey) 
+	{
+		sharedSecret = sharedKey;
+		try
+		{
+			Socket clientSocket  = new Socket(host,port);
+			
+			DiffieHellmanHelper helpme = new DiffieHellmanHelper();
+			
+			BufferedReader userdata = new BufferedReader(new InputStreamReader(System.in));
+			out = clientSocket.getOutputStream();
+			in = clientSocket.getInputStream();
+			
+			//start the handshake
+			String clientChallenge = java.util.UUID.randomUUID().toString();
+			String phase1 = CLIENT_IDENTIFICATION+","+ clientChallenge;
+			
+			m_gui.printf("Sending handshake message: " + phase1 );
+			
+			write(out, phase1.getBytes());
+			m_gui.printf("Waiting for Server respond with its challenge...");
+			
+			//read the server's public key
+//			char[] serverPublicKeyEncoded = new char[255];
+//			inFromServer.read(serverPublicKeyEncoded);
+			byte[] serverChallenge = read(in);
+			
+			byte[] serverid = encryptHandshake(sharedSecret, read(in), Cipher.DECRYPT_MODE);
+			byte[] clientChallengeFromServerBytes = encryptHandshake(sharedSecret, read(in), Cipher.DECRYPT_MODE);
+			byte[] serverPublickKeyEnc = encryptHandshake(sharedSecret, read(in), Cipher.DECRYPT_MODE);
+			
+			m_gui.printf("Challenge From Server: " + new String(serverChallenge));
+			//CHECK IF THE VALUES RECIEVED MATCH THE ORIGINAL VLUES!!!!!!!!!
+			String clientChallengeFromServer = new String(clientChallengeFromServerBytes);
+			
+			if (!clientChallengeFromServer.equals(clientChallenge)) {
+				m_gui.printf("Server returned incorrect challenge, terminating program");
+				return false;
+			}
+			
+			String serverIdentification = new String(serverid);
+			m_gui.printf("Sever id: " + serverIdentification);
+			if (!serverIdentification.equals(SERVER_IDENTIFICATION)) {
+				m_gui.printf("Connected to incorrect server, terminating program");
+				
+				return false;
+			}
+			m_gui.printf("Connection to "+ serverIdentification + " has been established. Completing handshake protocol..");
+			
+			// instantiate a DH public key from the encoded key material and get key parameters.
+	        PublicKey serverPubK = helpme.getUnencodedPublicKey(serverPublickKeyEnc);
+	        DHParameterSpec DHParams = ((DHPublicKey)serverPubK).getParams();
 
-    public void stop() {
-	client_thread.stop();
-    }
+	        //Generate client key pair using the params from the servers key
+	        KeyPair clientKeyPair = helpme.createKeyPair(DHParams);
+	        m_gui.printf("sending client session Key: " + clientKeyPair);
+	        //encode pubk and send it over to server
+	        byte[] clientEncPubk = clientKeyPair.getPublic().getEncoded();
+	        m_gui.printf("Encoded pubk(client): " + DatatypeConverter.printHexBinary(clientEncPubk));
+	        
+	        //Return to the server with client Authentication
+	        
+	        //client id
+	        write(out, encryptHandshake(sharedSecret, "client".getBytes(), Cipher.ENCRYPT_MODE));
+	        //return the challenge sent from the server
+	        write(out, encryptHandshake(sharedSecret, serverChallenge, Cipher.ENCRYPT_MODE));
+	        //send client Public key
+	        write(out, encryptHandshake(sharedSecret, clientEncPubk, Cipher.ENCRYPT_MODE));
+	        
+	        //Set serverPubK in the agreement
+	        helpme.keyAgreement.doPhase(serverPubK, true);
+	        
+	        //generate the secret symmetric key
+	        byte[] sharedSecretKey = helpme.keyAgreement.generateSecret();
+	        
+	        m_gui.printf("shared k(client): " + DatatypeConverter.printHexBinary(sharedSecretKey));
+			
+	        
+	      //since the Key Agreement object was reset we regen it 
+	        helpme.keyAgreement.doPhase(serverPubK, true);
+	       DESK = helpme.keyAgreement.generateSecret("DES");
+	       m_gui.connectionReady();
+		}
+		catch(Exception e)
+		{
+			return false;
+		}
+		return true;
+	}
+		
+	public byte[] read(InputStream in) throws IOException{
+		byte[] lenPackage = new byte[4];
+		in.read(lenPackage, 0, 4);
+		ByteBuffer bb = ByteBuffer.wrap(lenPackage);
+		int actuallen = bb.getInt();
+		byte[] finalbb = new byte[actuallen];
+		in.read(finalbb);
+		return finalbb;
+	}
+	
+	public void write(OutputStream out, byte[] towrite) throws IOException{
+		ByteBuffer bb = ByteBuffer.allocate(4);
+        bb.putInt(towrite.length);
+        out.write(bb.array());
+        out.write(towrite);
+        out.flush();
+	}
+	
+	public byte[] encryptDES(SecretKey k,byte[] plaintext) throws NoSuchAlgorithmException, NoSuchPaddingException, InvalidKeyException, InvalidAlgorithmParameterException, IllegalBlockSizeException, BadPaddingException{
+	    // Create PBE Cipher
+	    Cipher desCipher = Cipher.getInstance("DES/ECB/PKCS5Padding");
+	    // Initialize PBE Cipher with key and parameters
+	    desCipher.init(Cipher.ENCRYPT_MODE, k);
+	    // Encrypt the cleartext
+	    return desCipher.doFinal(plaintext);
+	}
+	
+	public byte[] decryptDES(SecretKey k, byte[] plaintext) throws NoSuchAlgorithmException, NoSuchPaddingException, InvalidKeyException, InvalidAlgorithmParameterException, IllegalBlockSizeException, BadPaddingException{
+	    // Create PBE Cipher
+	    Cipher desCipher = Cipher.getInstance("DES/ECB/PKCS5Padding");
+	    // Initialize PBE Cipher with key and parameters
+	    desCipher.init(Cipher.DECRYPT_MODE, k);
+	    // Encrypt the cleartext
+	    return desCipher.doFinal(plaintext);
+	}
+	
+	public byte[] encryptHandshake(String sharedSecretKey, byte[] plainText, int encryption_mode) throws NoSuchAlgorithmException, 
+			InvalidKeySpecException, NoSuchPaddingException, InvalidKeyException, InvalidAlgorithmParameterException, IllegalBlockSizeException, BadPaddingException {
+		PBEParameterSpec handshakeParamSpec = new PBEParameterSpec(SALT, ITERATION_COUNT);
+		PBEKeySpec handshakeKeySpec = new PBEKeySpec(sharedSecretKey.toCharArray());
+		SecretKeyFactory keyFactory = SecretKeyFactory.getInstance("PBEWithMD5AndDES");
+		SecretKey pbeKey = keyFactory.generateSecret(handshakeKeySpec);
+		Cipher handshakeCipher = Cipher.getInstance("PBEWithMD5AndDES");
+		handshakeCipher.init(encryption_mode, pbeKey, handshakeParamSpec);
+		return handshakeCipher.doFinal(plainText);
+	}
 
-    public void show_stats() {
-	int n = client_thread.stats_n();
-	for (int i = 0; i < n; ++i)
-	    {
-		String name = client_thread.stats_name(i);
-		long value = client_thread.stats_value(i);
-		if (value > 0)
-		    System.out.format("STAT %s=%s%n", name, value);
-	    }
-    }
-
-    @Override
-    public void event(ClientAPI_Event event) {
-	boolean error = event.getError();
-	String name = event.getName();
-	String info = event.getInfo();
-	System.out.format("EVENT: err=%b name=%s info='%s'%n", error, name, info);
-    }
-
-    // Callback to get a certificate
-    @Override
-    public void external_pki_cert_request(ClientAPI_ExternalPKICertRequest req) {
-	req.setError(true);
-	req.setErrorText("cert request failed: external PKI not implemented");
-    }
-
-    // Callback to sign data
-    @Override
-    public void external_pki_sign_request(ClientAPI_ExternalPKISignRequest req) {
-	req.setError(true);
-	req.setErrorText("sign request failed: external PKI not implemented");
-    }
-
-    @Override
-    public void log(ClientAPI_LogInfo loginfo) {
-	String text = loginfo.getText();
-	System.out.format("LOG: %s", text);
-    }
-
-    @Override
-    public void done(ClientAPI_Status status) {
-	System.out.format("DONE ClientAPI_Status: err=%b msg='%s'%n", status.getError(), status.getMessage());
-    }
-
-    @Override
-    public boolean socket_protect(int socket)
-    {
-	return false;
-    }
-
-    @Override
-    public boolean pause_on_connection_timeout()
-    {
-	return false;
-    }
-
-    @Override
-    public OpenVPNClientThread.TunBuilder tun_builder_new()
-    {
-	return null;
-    }
- }
+}
