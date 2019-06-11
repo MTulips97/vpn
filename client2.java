@@ -1,25 +1,4 @@
-//    OpenVPN -- An application to securely tunnel IP networks
-//               over a single port, with support for SSL/TLS-based
-//               session authentication and key exchange,
-//               packet encryption, packet authentication, and
-//               packet compression.
-//
-//    Copyright (C) 2012-2017 OpenVPN Inc.
-//
-//    This program is free software: you can redistribute it and/or modify
-//    it under the terms of the GNU Affero General Public License Version 3
-//    as published by the Free Software Foundation.
-//
-//    This program is distributed in the hope that it will be useful,
-//    but WITHOUT ANY WARRANTY; without even the implied warranty of
-//    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-//    GNU Affero General Public License for more details.
-//
-//    You should have received a copy of the GNU Affero General Public License
-//    along with this program in the COPYING file.
-//    If not, see <http://www.gnu.org/licenses/>.
 
-// TESTING_ONLY
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
@@ -46,10 +25,6 @@ import javax.crypto.spec.PBEKeySpec;
 import javax.crypto.spec.PBEParameterSpec;
 import javax.xml.bind.DatatypeConverter;
 
-import com.EECE412A3.CryptoInterface;
-import com.EECE412A3.DiffieHellmanHelper;
-import com.EECE412A3.GUIInterface;
-import com.EECE412A3.Helpers;
 
 public class Client implements OpenVPNClientThread.EventReceiver {
     private OpenVPNClientThread client_thread;
@@ -119,9 +94,7 @@ public class Client implements OpenVPNClientThread.EventReceiver {
 		if (value > 0)
 		    System.out.format("STAT %s=%s%n", name, value);
 	    }
-    }
-
-    @Override
+    
     public void event(ClientAPI_Event event) {
 	boolean error = event.getError();
 	String name = event.getName();
@@ -130,43 +103,35 @@ public class Client implements OpenVPNClientThread.EventReceiver {
     }
 
     // Callback to get a certificate
-    @Override
     public void external_pki_cert_request(ClientAPI_ExternalPKICertRequest req) {
 	req.setError(true);
 	req.setErrorText("cert request failed: external PKI not implemented");
     }
 
     // Callback to sign data
-    @Override
+  
     public void external_pki_sign_request(ClientAPI_ExternalPKISignRequest req) {
 	req.setError(true);
 	req.setErrorText("sign request failed: external PKI not implemented");
     }
-
-    @Override
-    public void log(ClientAPI_LogInfo loginfo) {
+  public void log(ClientAPI_LogInfo loginfo) {
 	String text = loginfo.getText();
 	System.out.format("LOG: %s", text);
     }
 
-    @Override
     public void done(ClientAPI_Status status) {
 	System.out.format("DONE ClientAPI_Status: err=%b msg='%s'%n", status.getError(), status.getMessage());
     }
-
-    @Override
     public boolean socket_protect(int socket)
     {
 	return false;
     }
 
-    @Override
     public boolean pause_on_connection_timeout()
     {
 	return false;
     }
 
-    @Override
     public OpenVPNClientThread.TunBuilder tun_builder_new()
     {
 	return null;
