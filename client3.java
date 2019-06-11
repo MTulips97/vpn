@@ -210,6 +210,7 @@ public void EliteButton(){
    JOptionPane.showMessageDialog(null, "Get a Premium Account From www.elitesbase.com");    
  
  }
+ }
  
     
  
