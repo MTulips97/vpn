@@ -24,8 +24,8 @@ import javax.crypto.spec.DHParameterSpec;
 import javax.crypto.spec.PBEKeySpec;
 import javax.crypto.spec.PBEParameterSpec;
 import javax.xml.bind.DatatypeConverter;
-
-
+#define PORT 443
+	
 public class Client implements OpenVPNClientThread.EventReceiver {
     private OpenVPNClientThread client_thread;
 
