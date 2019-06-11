@@ -40,9 +40,9 @@ public class Server implements CryptoInterface {
 			try
 			{
 				byte[] clientInput = readFromClient(inputStream);
-				m_gui.printf("Receiving encrypted bytes: " + Helpers.ByteToString(clientInput));
+				m_gui.puts("Receiving encrypted bytes: " + Helpers.ByteToString(clientInput));
 				String clientInputDecrypted = new String(communicationDecryptionCipher.doFinal(clientInput));
-				m_gui.printf( clientId + " > " + clientInputDecrypted);
+				m_gui.puts( clientId + " > " + clientInputDecrypted);
 			}
 			catch(Exception e )
 			{
@@ -56,11 +56,11 @@ public class Server implements CryptoInterface {
 	{
 		try
 		{
-			m_gui.printf("Sending Message: " + s );
+			m_gui.puts("Sending Message: " + s );
 			byte[] bytes = s.getBytes();
-			m_gui.printf("Bytes: " + Helpers.ByteToString(bytes) );
+			m_gui.puts("Bytes: " + Helpers.ByteToString(bytes) );
 			byte[] encrypted = communicationEncryptionCipher.doFinal(bytes);
-			m_gui.printf("Sending Encrypted bytes: " + Helpers.ByteToString(encrypted) );
+			m_gui.puts("Sending Encrypted bytes: " + Helpers.ByteToString(encrypted) );
 			writeToClient(outputStream, encrypted);
 			m_gui.printf(SERVER_IDENTIFICATION + " > " + s);
 		}
@@ -92,7 +92,7 @@ public class Server implements CryptoInterface {
 		}
 		catch(IOException e)
 		{
-			m_gui.printf("Server Error: " + e.getMessage() );
+			m_gui.puts("Server Error: " + e.getMessage() );
 			return false;
 		}
 		
@@ -119,30 +119,30 @@ public class Server implements CryptoInterface {
 			// Receive identification data from client.
 			byte[] identificationData = readFromClient(inputStream);
 			String identificationString = new String(identificationData);
-			m_gui.printf("Receiving handshake message: " + identificationString);
+			m_gui.puts("Receiving handshake message: " + identificationString);
 			
 			String[] identificationArray = identificationString.split(",");;
 			clientId = identificationArray[0];
 			String clientChallenge = identificationArray[1];
-			m_gui.printf(clientId + " has connected");
-			m_gui.printf("Client challenge" + clientChallenge);
+			m_gui.puts(clientId + " has connected");
+			m_gui.puts("Client challenge" + clientChallenge);
 			
 			// Generate Diffie-Hellman keypair, and send data to client to continue handshake. 
 			DHParameterSpec diffieHellmanParameters = diffieHellmanHelper.generateDiffieHellmanParameters();
-	        m_gui.printf("Generating Diffie Hellman key pair for server");
+	        m_gui.puts("Generating Diffie Hellman key pair for server");
 	        KeyPair serverKeyPair = diffieHellmanHelper.createKeyPair(diffieHellmanParameters);
 	        
 	        byte[] serverPublicKeyEncoded = serverKeyPair.getPublic().getEncoded();
 	        
 	        String serverChallenge = java.util.UUID.randomUUID().toString();
-	        m_gui.printf("Sending server challenge: " + serverChallenge);
+	        m_gui.puts("Sending server challenge: " + serverChallenge);
 	        byte[] encryptedServerIdentification = encryptHandshake(sharedSecretKey, SERVER_IDENTIFICATION.getBytes(), Cipher.ENCRYPT_MODE);
 	        writeToClient(outputStream, serverChallenge.getBytes());
-	        m_gui.printf("Sending id: " + SERVER_IDENTIFICATION);
+	        m_gui.puts("Sending id: " + SERVER_IDENTIFICATION);
 	        writeToClient(outputStream, encryptedServerIdentification);
-	        m_gui.printf("Sending client challenge: " + clientChallenge);
+	        m_gui.puts("Sending client challenge: " + clientChallenge);
 	        writeToClient(outputStream, encryptHandshake(sharedSecretKey, clientChallenge.getBytes(), Cipher.ENCRYPT_MODE));
-	        m_gui.printf("Sending server session Key Pair: " + serverKeyPair);
+	        m_gui.puts("Sending server session Key Pair: " + serverKeyPair);
 	        writeToClient(outputStream, encryptHandshake(sharedSecretKey, serverPublicKeyEncoded, Cipher.ENCRYPT_MODE));
 	
 	        byte[] identificationData2 = readFromClient(inputStream);
@@ -151,12 +151,12 @@ public class Server implements CryptoInterface {
 	        
 	        String clientId2 = new String(encryptHandshake(sharedSecretKey, identificationData2, Cipher.DECRYPT_MODE));
 	        if (!clientId2.equals(clientId)) {
-	        	m_gui.printf("Incorrect client has connected, terminating program");
+	        	m_gui.puts("Incorrect client has connected, terminating program");
 	        	m_gui.connectionClosed();
 	        }
 	        String serverChallengeReturned = new String(encryptHandshake(sharedSecretKey, serverChallengeData, Cipher.DECRYPT_MODE));
 	        if (!serverChallengeReturned.equals(serverChallenge)) {
-	        	m_gui.printf("Incorrect server challenge returned, terminating program");
+	        	m_gui.puts("Incorrect server challenge returned, terminating program");
 	        	m_gui.connectionClosed();
 	        }
 	        byte[] unencryptedEncodedPublicKeyBytes = encryptHandshake(sharedSecretKey, clientPublicKeyBytesEncoded, Cipher.DECRYPT_MODE);
@@ -164,8 +164,8 @@ public class Server implements CryptoInterface {
 			diffieHellmanHelper.getKeyAgreement().doPhase(clientPublicKey, true);
 			
 			byte[] serverSharedKey = diffieHellmanHelper.getKeyAgreement().generateSecret();
-			m_gui.printf("The shared key is: ");
-			m_gui.printf(DatatypeConverter.printHexBinary(serverSharedKey));
+			m_gui.puts("The shared key is: ");
+			m_gui.puts(DatatypeConverter.printHexBinary(serverSharedKey));
 			
 			// Handshake is done, now encrypt all user input in DES format using shared secret key.
 			diffieHellmanHelper.getKeyAgreement().doPhase(clientPublicKey, true);
@@ -187,8 +187,8 @@ public class Server implements CryptoInterface {
 		while (true) {
 			byte[] clientInput = readFromClient(inputStream);
 			String clientInputDecrypted = new String(communicationDecryptionCipher.doFinal(clientInput));
-			System.out.println(clientId + " sent: " + clientInputDecrypted);
-			System.out.println(">>");
+			puts(clientId + " sent: " + clientInputDecrypted);
+			puts(">>");
 			userInput = userInputReader.readLine();
 			writeToClient(outputStream, communicationEncryptionCipher.doFinal(userInput.getBytes()));
 		}
