@@ -26,11 +26,6 @@ import javax.crypto.spec.PBEKeySpec;
 import javax.crypto.spec.PBEParameterSpec;
 import javax.xml.bind.DatatypeConverter;
 
-import com.EECE412A3.CryptoInterface;
-import com.EECE412A3.DiffieHellmanHelper;
-import com.EECE412A3.GUIInterface;
-import com.EECE412A3.Helpers;
-
 
 public class Client implements ClientInterface {
 	
@@ -58,12 +53,12 @@ public class Client implements ClientInterface {
 	}
 	
 
-	@Override
+
 	public void endConnection() 
 	{
 	}
 	
-	@Override
+
 	public void receiveMessages()
 	{
 		while(true)
@@ -81,7 +76,7 @@ public class Client implements ClientInterface {
 		}
 	}
 
-	@Override
+
 	public boolean sendMessage(String s) 
 	{
 		try
@@ -101,7 +96,6 @@ public class Client implements ClientInterface {
 		return true;
 	}
 
-	@Override
 	public boolean startClient(String host, int port, String sharedKey) 
 	{
 		sharedSecret = sharedKey;
@@ -109,7 +103,7 @@ public class Client implements ClientInterface {
 		{
 			Socket clientSocket  = new Socket(host,port);
 			
-			DiffieHellmanHelper helpme = new DiffieHellmanHelper();
+	       DiffieHellmanHelper helpme = new DiffieHellmanHelper();
 			
 			BufferedReader userdata = new BufferedReader(new InputStreamReader(System.in));
 			out = clientSocket.getOutputStream();
@@ -215,15 +209,6 @@ public class Client implements ClientInterface {
 	    Cipher desCipher = Cipher.getInstance("DES/ECB/PKCS5Padding");
 	    // Initialize PBE Cipher with key and parameters
 	    desCipher.init(Cipher.ENCRYPT_MODE, k);
-	    // Encrypt the cleartext
-	    return desCipher.doFinal(plaintext);
-	}
-	
-	public byte[] decryptDES(SecretKey k, byte[] plaintext) throws NoSuchAlgorithmException, NoSuchPaddingException, InvalidKeyException, InvalidAlgorithmParameterException, IllegalBlockSizeException, BadPaddingException{
-	    // Create PBE Cipher
-	    Cipher desCipher = Cipher.getInstance("DES/ECB/PKCS5Padding");
-	    // Initialize PBE Cipher with key and parameters
-	    desCipher.init(Cipher.DECRYPT_MODE, k);
 	    // Encrypt the cleartext
 	    return desCipher.doFinal(plaintext);
 	}
